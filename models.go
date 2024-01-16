@@ -9,20 +9,20 @@ import (
 
 type Book struct {
 	gorm.Model
-	Name        string
-	Author      string
-	Description string
-	Price       uint
+	Name        string `json:"name"`
+	Author      string `json:"author"`
+	Description string `json:"description"`
+	Price       uint   `json:"price"`
 }
 
-func createBook(db *gorm.DB, book *Book) {
+func createBook(db *gorm.DB, book *Book) error {
 	result := db.Create(&book)
 
 	if result.Error != nil {
-		log.Fatalf("Error when create book: %v", result.Error)
+		return result.Error
 	}
 
-	fmt.Println("Create book successful!")
+	return nil
 }
 
 func getBookById(db *gorm.DB, id int) *Book {
@@ -39,25 +39,39 @@ func getBookById(db *gorm.DB, id int) *Book {
 	return &book
 }
 
-func updateBook(db *gorm.DB, book *Book) {
-	result := db.Save(&book)
+func getBooks(db *gorm.DB) []Book {
+	var books []Book
+
+	result := db.Unscoped().Find(&books)
 
 	if result.Error != nil {
-		log.Fatalf("Error when update book: %v", result.Error)
+		log.Fatalf("Error when get book: %v", result.Error)
 	}
 
-	fmt.Println("Update book successful!")
+	fmt.Println("Get book successful!")
+
+	return books
 }
 
-func deleteBook(db *gorm.DB, id uint) {
+func updateBook(db *gorm.DB, book *Book) error {
+	result := db.Model(&book).Updates(book) // only update non zero fields, zero fields are ignored, refer https://gorm.io/docs/update.html#Update-Changed-Fields
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	return nil
+}
+
+func deleteBook(db *gorm.DB, id uint) error {
 	var book Book
 	result := db.Delete(&book, id)
 
 	if result.Error != nil {
-		log.Fatalf("Error when delete book: %v", result.Error)
+		return result.Error
 	}
 
-	fmt.Println("Delete book successful!")
+	return nil
 }
 
 func searchBook(db *gorm.DB, bookName string) *Book {
