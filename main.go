@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v4"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -20,6 +21,23 @@ const (
 	password = "mypassword"
 	dbname   = "mydatabase"
 )
+
+func authRequired(c *fiber.Ctx) error {
+	cookie := c.Cookies("jwt")
+	jwtSecretKey := "TestSecret" // should be env
+
+	token, err := jwt.ParseWithClaims(cookie, jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(jwtSecretKey), nil
+	})
+
+	if err != nil || !token.Valid {
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+	claim := token.Claims.(jwt.MapClaims)
+	fmt.Println(claim["user_id"])
+
+	return c.Next()
+}
 
 func main() {
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
@@ -40,11 +58,13 @@ func main() {
 	if err != nil {
 		panic("failed to connect database")
 	}
-	db.AutoMigrate(&Book{})
+	db.AutoMigrate(&Book{}, &User{})
+
 	fmt.Println("Migrate successful!")
 
 	// Setup Fiber
 	app := fiber.New()
+	app.Use("/books", authRequired)
 
 	app.Get("/books", func(c *fiber.Ctx) error {
 		return c.JSON(getBooks(db))
@@ -101,6 +121,48 @@ func main() {
 		deleteBook(db, uint(id))
 		return c.JSON(fiber.Map{
 			"message": "Delete book successful!",
+		})
+	})
+
+	// User API
+
+	app.Post("/register", func(c *fiber.Ctx) error {
+		user := new(User)
+		if err := c.BodyParser(user); err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+
+		err = createUser(db, user)
+		if err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+
+		return c.JSON(fiber.Map{
+			"message": "Register Successful",
+		})
+	})
+
+	app.Post("/login", func(c *fiber.Ctx) error {
+		user := new(User)
+		if err := c.BodyParser(user); err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		fmt.Println("log")
+		token, err := loginUser(db, user)
+
+		if err != nil {
+			return c.SendStatus(fiber.StatusUnauthorized)
+		}
+
+		c.Cookie(&fiber.Cookie{
+			Name:     "jwt",
+			Value:    token,
+			Expires:  time.Now().Add(time.Hour * 72),
+			HTTPOnly: true,
+		})
+
+		return c.JSON(fiber.Map{
+			"token": token,
 		})
 	})
 
