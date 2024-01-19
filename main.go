@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -58,113 +57,57 @@ func main() {
 	if err != nil {
 		panic("failed to connect database")
 	}
-	db.AutoMigrate(&Book{}, &User{})
 
-	fmt.Println("Migrate successful!")
-
-	// Setup Fiber
 	app := fiber.New()
-	app.Use("/books", authRequired)
+	// Migrate the schema
+	db.AutoMigrate(&Book{}, &Publisher{}, &Author{}, &AuthorBook{})
 
-	app.Get("/books", func(c *fiber.Ctx) error {
-		return c.JSON(getBooks(db))
-	})
+	// ขาสร้าง
+	publisher := Publisher{
+		Details: "Publisher Details",
+		Name:    "Publisher Name",
+	}
+	_ = createPublisher(db, &publisher)
 
-	app.Get("/books/:id", func(c *fiber.Ctx) error {
-		id, err := strconv.Atoi(c.Params("id"))
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-		book := getBookById(db, id)
-		return c.JSON(book)
-	})
+	// Example data for a new author
+	author := Author{
+		Name: "Author Name",
+	}
+	_ = createAuthor(db, &author)
 
-	app.Post("/books", func(c *fiber.Ctx) error {
-		book := new(Book)
-		if err := c.BodyParser(book); err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-		createBook(db, book)
-		return c.JSON(fiber.Map{
-			"message": "Create book successful!",
-		})
-	})
+	// // Example data for a new book with an author
+	book := Book{
+		Name:        "Book Title",
+		Author:      "Book Author",
+		Description: "Book Description",
+		PublisherID: publisher.ID,     // Use the ID of the publisher created above
+		Authors:     []Author{author}, // Add the created author
+	}
+	_ = createBookWithAuthor(db, &book, []uint{author.ID})
 
-	app.Put("/books/:id", func(c *fiber.Ctx) error {
-		id, err := strconv.Atoi(c.Params("id"))
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-		book := new(Book)
+	// ขาเรียก
 
-		if err := c.BodyParser(book); err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
+	// Example: Get a book with its publisher
+	bookWithPublisher, err := getBookWithPublisher(db, 1) // assuming a book with ID 1
+	if err != nil {
+		// Handle error
+	}
 
-		book.ID = uint(id)
+	// Example: Get a book with its authors
+	bookWithAuthors, err := getBookWithAuthors(db, 1) // assuming a book with ID 1
+	if err != nil {
+		// Handle error
+	}
 
-		err = updateBook(db, book)
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
+	// Example: List books of a specific author
+	authorBooks, err := listBooksOfAuthor(db, 1) // assuming an author with ID 1
+	if err != nil {
+		// Handle error
+	}
 
-		return c.JSON(fiber.Map{
-			"message": "Update book successful!",
-		})
-	})
-
-	app.Delete("/books/:id", func(c *fiber.Ctx) error {
-		id, err := strconv.Atoi(c.Params("id"))
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-		deleteBook(db, uint(id))
-		return c.JSON(fiber.Map{
-			"message": "Delete book successful!",
-		})
-	})
-
-	// User API
-
-	app.Post("/register", func(c *fiber.Ctx) error {
-		user := new(User)
-		if err := c.BodyParser(user); err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-
-		err = createUser(db, user)
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-
-		return c.JSON(fiber.Map{
-			"message": "Register Successful",
-		})
-	})
-
-	app.Post("/login", func(c *fiber.Ctx) error {
-		user := new(User)
-		if err := c.BodyParser(user); err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-		fmt.Println("log")
-		token, err := loginUser(db, user)
-
-		if err != nil {
-			return c.SendStatus(fiber.StatusUnauthorized)
-		}
-
-		c.Cookie(&fiber.Cookie{
-			Name:     "jwt",
-			Value:    token,
-			Expires:  time.Now().Add(time.Hour * 72),
-			HTTPOnly: true,
-		})
-
-		return c.JSON(fiber.Map{
-			"token": token,
-		})
-	})
+	fmt.Println(bookWithPublisher)
+	fmt.Println(bookWithAuthors)
+	fmt.Println(authorBooks)
 
 	app.Listen(":8080")
 }
